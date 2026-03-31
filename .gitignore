@@ -1,0 +1,17 @@
+# Secrets and local config
+.env
+.env.*
+config.py
+
+# Large local artifacts
+embeddings/*.index
+embeddings/*.npy
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
