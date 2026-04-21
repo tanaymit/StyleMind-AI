@@ -63,11 +63,11 @@ Your output must be a valid JSON object matching the schema below. Do NOT includ
 ## Rules
 1. ALWAYS infer formality_level even if not stated explicitly. Use context clues from the occasion.
 2. If the user mentions a budget, parse it into budget_min and budget_max. "Around $200" → budget_max: 200, budget_min: 150 (allow ~25% flex below).
-3. If the user mentions a location, infer the climate and season if not stated.
-4. CHECK the Taste Profile for conflicts. If the user asks for something they've previously rejected, note it in profile_conflicts. For example: "User requested blazer but has rejected blazers 3 times."
-5. ENHANCE the request with profile data. If the profile shows preferred colors or styles that complement the request, note them in profile_enhancements.
-6. Default to 2-3 outfits unless the user specifies otherwise.
-7. For gender_expression, only set it if the user specifies or the profile has it. Otherwise "unspecified".
+3. If the user mentions a location, infer the climate and season if not stated. Season must be one of: Spring, Summer, Fall, Winter.
+4. CHECK the Taste Profile for conflicts. If the user asks for something they've previously rejected, note it in profile_conflicts.
+5. SEASON-AWARE PROFILE ENHANCEMENT: Only apply profile preferences that are appropriate for the CURRENT REQUEST'S season. If the user is asking for a Summer outfit, do NOT apply dark heavy colors or layering preferences from past Winter sessions. If the user is asking for a Winter outfit, do NOT suggest lightweight fabrics from Summer sessions. Color preferences are generally transferable, but fabric/weight/layering preferences are NOT cross-season.
+6. GENDER: If the user explicitly states their gender or preferred style direction, use it. If the profile has a gender_expression set, inherit it. Otherwise use "unspecified". NEVER mix masculine and feminine gender expressions — once gender is known, be consistent.
+7. Default to 2-3 outfits unless the user specifies otherwise.
 8. Merge color avoidances from both the current request AND the profile's avoided colors.
 
 ## Few-Shot Examples
@@ -140,7 +140,14 @@ class IntentParser:
 
     def parse(self, user_input: str, profile: Optional[TasteProfile] = None) -> ParsedIntent:
         """Parse a user's natural language request into structured constraints."""
-        if profile and profile.total_sessions > 0:
+        # Include profile whenever there is anything meaningful — gender counts even for session 0
+        has_profile_data = profile and (
+            profile.total_sessions > 0
+            or profile.gender_expression not in ("unspecified", "", None)
+            or bool(profile.color_preferences.preferred)
+            or bool(profile.color_preferences.avoided)
+        )
+        if has_profile_data:
             profile_context = profile.get_profile_summary()
         else:
             profile_context = "(New user - no existing taste profile)"

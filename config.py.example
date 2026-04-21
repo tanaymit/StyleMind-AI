@@ -1,0 +1,80 @@
+"""
+StyleMind AI - Configuration
+Copy this file to config.py and fill in your credentials.
+config.py is gitignored — never commit it with real keys.
+"""
+
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ── Paths ──────────────────────────────────────────────────────────────────
+PROJECT_ROOT = Path(__file__).parent
+DATA_DIR = PROJECT_ROOT / "data"
+EMBEDDINGS_DIR = PROJECT_ROOT / "embeddings"
+PROFILES_DIR = PROJECT_ROOT / "profiles"
+
+for d in [DATA_DIR, EMBEDDINGS_DIR, PROFILES_DIR]:
+    d.mkdir(exist_ok=True)
+
+# ── Provider config ────────────────────────────────────────────────────────
+# Which LLM provider to use: "bedrock" or "openai"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "bedrock")
+
+# ── AWS Bedrock ────────────────────────────────────────────────────────────
+AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+
+# Bedrock model IDs — tiered approach
+BEDROCK_MODEL_HEAVY = "us.anthropic.claude-sonnet-4-6"
+BEDROCK_MODEL_LIGHT = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+
+# ── OpenAI ─────────────────────────────────────────────────────────────────
+# Used for embeddings (always) and LLM calls if LLM_PROVIDER=openai
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_LLM_MODEL = "gpt-4o"
+
+# ── Embeddings (always OpenAI) ─────────────────────────────────────────────
+# Override EMBEDDING_BASE_URL if routing through a custom gateway.
+EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "https://api.openai.com")
+EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_DIMENSIONS = 1536
+
+# ── Retrieval ──────────────────────────────────────────────────────────────
+FAISS_INDEX_PATH = EMBEDDINGS_DIR / "catalog.index"
+METADATA_PATH = EMBEDDINGS_DIR / "catalog_metadata.csv"
+EMBEDDINGS_NPY_PATH = EMBEDDINGS_DIR / "catalog_embeddings.npy"
+
+TOP_K_RETRIEVAL = 20
+TOP_K_RERANK = 5
+
+# ── Dataset columns ────────────────────────────────────────────────────────
+CATALOG_COLUMNS = [
+    "id", "gender", "masterCategory", "subCategory", "articleType",
+    "baseColour", "season", "year", "usage", "productDisplayName",
+]
+
+# ── Formality mapping ─────────────────────────────────────────────────────
+USAGE_FORMALITY_MAP = {
+    "Very Casual": ["Casual", "Sports"],
+    "Casual": ["Casual", "Smart Casual"],
+    "Smart Casual": ["Casual", "Smart Casual", "Formal"],
+    "Semi-Formal": ["Smart Casual", "Formal"],
+    "Formal": ["Formal", "Party"],
+    "Black Tie": ["Formal", "Party"],
+}
+
+# ── Price simulation ───────────────────────────────────────────────────────
+PRICE_RANGES = {
+    "Tshirts": (15, 50), "Shirts": (25, 80), "Jeans": (30, 90),
+    "Casual Shoes": (35, 100), "Sports Shoes": (40, 120),
+    "Formal Shoes": (50, 150), "Watches": (30, 200), "Kurtas": (20, 70),
+    "Tops": (15, 55), "Handbags": (25, 150), "Heels": (30, 120),
+    "Sunglasses": (15, 80), "Wallets": (15, 60), "Belts": (15, 50),
+    "Sandals": (15, 60), "Flip Flops": (10, 35), "Dresses": (30, 120),
+    "Trousers": (25, 80), "Shorts": (15, 50), "Jackets": (40, 150),
+    "Blazers": (50, 200), "Sweaters": (25, 90), "Track Pants": (20, 60),
+    "Suits": (80, 300), "Skirts": (20, 70),
+}
+DEFAULT_PRICE_RANGE = (15, 80)

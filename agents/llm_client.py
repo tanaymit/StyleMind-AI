@@ -67,10 +67,16 @@ class BedrockClient(LLMClient):
 
     def __init__(self, model_id: str, region: str = AWS_REGION):
         import boto3
+        from botocore.config import Config
         self._model_id = model_id
         self._client = boto3.client(
             "bedrock-runtime",
             region_name=region,
+            config=Config(
+                read_timeout=120,
+                connect_timeout=15,
+                retries={"max_attempts": 2, "mode": "standard"},
+            ),
         )
 
     @property

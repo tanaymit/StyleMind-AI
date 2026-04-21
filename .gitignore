@@ -1,11 +1,14 @@
 # Secrets and local config
 .env
-.env.*
 config.py
 
 # Large local artifacts
-embeddings/*.index
-embeddings/*.npy
+embeddings/
+data/images/
+data/*.csv
+
+# User profiles (local runtime data)
+profiles/
 
 # Python caches and virtual environments
 __pycache__/
