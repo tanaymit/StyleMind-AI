@@ -2,7 +2,7 @@
 
 > *An AI that knows what to wear better than you do. (Probably.)*
 
-An agentic LLM system that builds a persistent taste profile for each user and translates natural language fashion requests into real, scored, lookbook-quality outfit recommendations — complete with product images from a 41,000-item catalog.
+StyleMind is a personal AI stylist. You describe what you need ("smart casual dinner, Pittsburgh, October, around $150") and it figures out the outfit, finds real products from a 44K-item catalog, and writes you a little lookbook. It also remembers your taste across sessions, so it gets more useful the more you use it.
 
 **Course:** 11-766 Large Language Model Applications (CMU)  
 **Author:** Tanay Mittal (tanaymit@andrew.cmu.edu)
@@ -13,212 +13,219 @@ An agentic LLM system that builds a persistent taste profile for each user and t
 
 You type: *"Smart casual dinner in Pittsburgh, October, budget around $150"*
 
-StyleMind:
-1. Figures out what you actually mean (Intent Parser)
-2. Designs 2-3 outfit concepts with chain-of-thought reasoning (Style Planner)
-3. Finds real matching products via semantic search + filters (Retriever)
-4. Assembles and scores complete outfits (Assembler)
-5. Writes a mini lookbook blurb for each outfit (Lookbook Generator)
-6. Remembers what you liked and updates your taste profile forever (Profile Updater)
+StyleMind runs through six steps:
+
+1. **Intent Parser** - reads your request and pulls out occasion, formality, budget, season, gender
+2. **Style Planner** - designs outfit concepts with reasoning for why each item works
+3. **Product Retriever** - searches a 41K-item catalog using semantic search + category filters
+4. **Outfit Assembler** - picks the best product per slot and scores the outfit
+5. **Lookbook Generator** - writes a short editorial blurb for each outfit
+6. **Profile Updater** - saves what you liked so future recommendations feel personal
 
 Next time you ask, it already knows you hate cargo pants.
 
 ---
 
-## Architecture: Tiered Model Approach
+## Models used
 
-StyleMind is deliberately cheap. Creative tasks get the big model; mechanical tasks get the small one.
+StyleMind uses two tiers of models. Creative work gets the bigger model; mechanical extraction gets the smaller one.
 
-| Agent | Tier | Model | Reasoning |
-|---|---|---|---|
-| Intent Parser | Light | Claude Haiku 4.5 (Bedrock) | Structured JSON extraction — Haiku is plenty |
-| Profile Updater | Light | Claude Haiku 4.5 (Bedrock) | Mechanical diff generation, not creative work |
-| Style Planner | Heavy | Claude Sonnet 4.6 (Bedrock) | Chain-of-thought outfit design — needs the big brain |
-| Lookbook Generator | Heavy | Claude Sonnet 4.6 (Bedrock) | Writing aspirational prose badly requires talent |
-| Embeddings | — | text-embedding-3-small (OpenAI) | Cheapest good embedding model, ~$0.10 for the full catalog |
+| Agent | Tier | Model |
+|---|---|---|
+| Intent Parser | Light | Claude Haiku 4.5 (Bedrock) |
+| Profile Updater | Light | Claude Haiku 4.5 (Bedrock) |
+| Style Planner | Heavy | Claude Sonnet 4.6 (Bedrock) |
+| Lookbook Generator | Heavy | Claude Sonnet 4.6 (Bedrock) |
+| Embeddings | - | text-embedding-3-small (OpenAI) |
 
-**Estimated cost for a full session (5 agent calls):** ~$0.03–0.08  
-**Estimated cost to embed the whole 41K catalog:** ~$0.10 one-time
+**Cost per session (5 agent calls):** ~$0.03 to $0.08  
+**Cost to build the FAISS index from the full catalog:** ~$0.10, one time
 
 ---
 
-## How It Works (The Real Architecture)
+## How it works
 
 ```
 Your fashion emergency
-         │
-         ▼
-┌─────────────────────┐
-│   Intent Parser      │ ◄─── Your taste profile (gender, colors, rejections, etc.)
-│   Haiku 4.5 (light) │
-│   → structured JSON  │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│   Style Planner      │ ◄─── Taste profile again (it's important)
-│  Sonnet 4.6 (heavy) │
-│  → outfit blueprints │  (abstract concepts — no specific products yet)
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Product Retriever   │  Parallel FAISS semantic search across all slots
-│  FAISS + OpenAI emb  │  Hard slot→category filters (wallets ≠ outerwear)
-│  41,888 real items   │  Gender + season filters that never get relaxed
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Outfit Assembler    │  Rule-based scoring: 50% semantic sim + 30% color
-│  (no LLM needed)    │  harmony + 20% budget fit. Instant.
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Lookbook Generator  │  Writes the "editorial voice" prose for each outfit
-│  Sonnet 4.6 (heavy) │  Both outfits generated in parallel
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Profile Updater     │  Converts your feedback into a structured diff
-│  Haiku 4.5 (light)  │  and patches your taste profile JSON on disk
-└─────────────────────┘
-           │
-           ▼
+         |
+         v
++---------------------+
+|   Intent Parser     |  <-- taste profile (gender, colors, past rejections)
+|   Haiku 4.5         |
+|   -> structured JSON|
++----------+----------+
+           |
+           v
++---------------------+
+|   Style Planner     |  <-- taste profile again (it matters)
+|   Sonnet 4.6        |
+|   -> outfit concepts|  abstract ideas, no specific products yet
++----------+----------+
+           |
+           v
++---------------------+
+|  Product Retriever  |  parallel FAISS search across all outfit slots
+|  FAISS + embeddings |  hard filters: wallets can't be outerwear, etc.
+|  41,888 real items  |  gender + season filters never get relaxed
++----------+----------+
+           |
+           v
++---------------------+
+|  Outfit Assembler   |  scores: 50% semantic match + 30% color harmony
+|  (no LLM needed)   |  + 20% budget fit. Rule-based, basically instant.
++----------+----------+
+           |
+           v
++---------------------+
+|  Lookbook Generator |  writes editorial-style prose for each outfit
+|  Sonnet 4.6         |  both outfits generated in parallel
++----------+----------+
+           |
+           v
++---------------------+
+|  Profile Updater    |  turns your feedback into a structured update
+|  Haiku 4.5          |  and saves it to your profile JSON
++---------------------+
+           |
+           v
     You look great.
     (Probably.)
 ```
 
-**Total wall-clock time: ~7–12 seconds** (parallel retrieval + parallel lookbook generation)
+**Total time: about 7 to 12 seconds** (parallel retrieval + parallel lookbook generation)
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 stylemind/
-├── app.py                    # Streamlit UI — the thing you actually see
-├── pipeline.py               # Orchestrator: wires all agents together with parallelism
-├── config.py                 # Central config (models, paths, API keys)
-├── setup.py                  # One-command setup: builds FAISS index from catalog
-├── data_pipeline.py          # Raw CSV → cleaned dataset (run once)
-├── requirements.txt
-├── .env.example
-│
-├── agents/
-│   ├── llm_client.py         # Provider-agnostic LLM client (Bedrock or OpenAI)
-│   ├── taste_profile.py      # The persistent brain: Pydantic schema, save/load
-│   ├── intent_parser.py      # Light tier: NL request → structured JSON constraints
-│   ├── style_planner.py      # Heavy tier: constraints → abstract outfit blueprints
-│   ├── retriever.py          # FAISS semantic search + metadata hard filters
-│   ├── outfit_assembler.py   # Rule-based assembly and scoring (no LLM)
-│   ├── lookbook_generator.py # Heavy tier: outfits → editorial prose
-│   └── profile_updater.py    # Light tier: feedback → profile diffs
-│
-├── data/
-│   ├── catalog_cleaned.csv   # 41,888 fashion items with prices, colors, seasons
-│   ├── images/               # 44,441 product JPEGs (referenced by item ID)
-│   └── embedding_strings.csv # Pre-built strings for FAISS indexing
-│
-├── embeddings/               # FAISS index (built by setup.py, ~170MB)
-├── profiles/                 # Persistent user profiles stored as JSON
-└── tests/
-    ├── test_data.py          # Data sanity checks (no API needed)
-    ├── test_local.py         # Schema + factory tests
-    └── test_integration.py   # Full pipeline test (needs credentials)
++-- app.py                    # Streamlit UI
++-- pipeline.py               # wires all agents together, handles parallelism
++-- config.py                 # models, paths, API keys (gitignored, copy from config.py.example)
++-- setup.py                  # builds the FAISS index from the catalog (run once)
++-- data_pipeline.py          # cleans the raw Kaggle CSV (run once)
++-- requirements.txt
++-- .env.example
++-- config.py.example
+|
++-- agents/
+|   +-- llm_client.py         # unified Bedrock / OpenAI client
+|   +-- taste_profile.py      # user profile schema and save/load
+|   +-- intent_parser.py      # natural language -> structured constraints
+|   +-- style_planner.py      # constraints -> outfit blueprints
+|   +-- retriever.py          # FAISS search + metadata filters
+|   +-- outfit_assembler.py   # picks products and scores outfits
+|   +-- lookbook_generator.py # writes the outfit prose
+|   +-- profile_updater.py    # updates profile from feedback
+|
++-- data/                     # catalog CSVs and product images (gitignored)
++-- embeddings/               # FAISS index, built by setup.py (gitignored)
++-- profiles/                 # user profiles saved as JSON (gitignored)
++-- tests/
+    +-- test_data.py          # data sanity checks, no API needed
+    +-- test_local.py         # schema and factory tests
+    +-- test_integration.py   # full pipeline test, needs credentials
 ```
 
 ---
 
-## Quick Start
+## Quick start
 
 ### 1. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure credentials
+### 2. Set up config files
 ```bash
 cp .env.example .env
+cp config.py.example config.py
 ```
-Edit `.env`:
-```
-OPENAI_API_KEY=sk-...          # Required for embeddings
-LLM_PROVIDER=bedrock           # or "openai"
 
-# If using Bedrock:
+Fill in your credentials in `.env`:
+```
+OPENAI_API_KEY=sk-...
+
+LLM_PROVIDER=bedrock
+
+# if using Bedrock:
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_DEFAULT_REGION=us-east-1
 
-# If using OpenAI for everything:
+# if using OpenAI for everything instead:
 # LLM_PROVIDER=openai
 ```
 
-### 3. Enable Bedrock model access (if using Bedrock)
-AWS Console → Bedrock → Model access → Request access for:
-- `Anthropic Claude Sonnet 4.6` (heavy tier)
-- `Anthropic Claude Haiku 4.5` (light tier)
+### 3. Enable Bedrock model access (Bedrock users only)
+Go to AWS Console > Bedrock > Model access and request access for:
+- Anthropic Claude Sonnet 4.6
+- Anthropic Claude Haiku 4.5
 
-This takes a few minutes and is free. AWS just wants you to click "agree."
+Takes a few minutes and is free. AWS just wants you to click agree.
 
-### 4. Build the FAISS index
+### 4. Get the catalog data
+Download the [Fashion Product Images dataset from Kaggle](https://www.kaggle.com/datasets/paramaggarwal/fashion-product-images-dataset) and put the CSVs in `data/`. Then run:
+```bash
+python data_pipeline.py
+```
+
+### 5. Build the FAISS index
 ```bash
 python setup.py
 ```
-Takes ~3–5 minutes, costs ~$0.10 in OpenAI embedding credits. Do this once.
+Takes about 3 to 5 minutes and costs ~$0.10 in OpenAI embedding credits. Only needs to run once.
 
-### 5. Run the app
+### 6. Run the app
 ```bash
 streamlit run app.py
 ```
 
-### 6. Use it
-- Enter a **User ID** in the sidebar (anything, e.g. `alex` or `tanay`)
-- Select your **gender** preference so the catalog is filtered correctly
-- Type your styling request in the main box and hit **Style me**
-- Accept an outfit to save it to your profile for future personalization
+### 7. Use it
+- Enter a **User ID** in the sidebar (anything works, like `alex` or `tanay`)
+- Set your **gender** preference so the catalog filters correctly
+- Type what you need and hit **Style me**
+- Accept an outfit to save it to your profile
 
 ---
 
-## Provider Switching
+## Switching providers
 
 ```bash
-# Default: AWS Bedrock (uses your AWS credits)
+# default: AWS Bedrock
 LLM_PROVIDER=bedrock
 
-# Fallback: everything through OpenAI
+# fallback: everything through OpenAI
 LLM_PROVIDER=openai
 ```
 
-The `llm_client.py` abstraction means all agents work identically with either provider. Embeddings always go through OpenAI regardless (Bedrock doesn't offer text-embedding-3-small).
+Embeddings always go through OpenAI regardless of this setting (Bedrock does not offer text-embedding-3-small).
 
 ---
 
-## Key Design Decisions
+## Design decisions
 
-**Why tiered models?**  
-Running Sonnet for everything would cost ~3× more per session. Intent parsing and profile diffing are mechanical structured extraction tasks — Haiku handles them fine at a fraction of the cost.
+**Why two model tiers?**  
+Running Sonnet for every single agent call would cost about 3x more per session. Parsing a sentence into JSON and diffing a profile are mechanical tasks that Haiku handles fine. Sonnet is only used where creative reasoning actually matters.
 
-**Why FAISS + metadata filters instead of pure vector search?**  
-Pure semantic search will happily return a wallet when you ask for outerwear. Hard categorical filters (slot → masterCategory/subCategory/articleType) prevent this. Semantic search handles the "what kind of shirt" question; the metadata filters handle "but actually a shirt, not a blazer."
+**Why FAISS plus metadata filters instead of pure vector search?**  
+Pure semantic search will happily return a wallet when you ask for outerwear. The metadata filters (slot maps to allowed categories) prevent that. Semantic search figures out "what kind of item"; the filters ensure it is actually that category.
 
-**Why never relax season or gender in retrieval fallback?**  
-A summer outfit with a winter coat is worse than no outfit at all. The fallback cascade only relaxes soft constraints (formality, exact color, budget) — never the hard constraints.
+**Why are gender and season never relaxed in the fallback cascade?**  
+A summer outfit with a winter coat is worse than showing fewer results. Other constraints like exact color, formality level, and budget can be relaxed when results are thin. Gender and season cannot.
 
-**Why persist gender as a code-level override in the pipeline?**  
-LLMs are probabilistic. If the user said "Men's" in the sidebar, we enforce it in code after parsing, regardless of what the intent LLM outputs. Belt and suspenders.
+**Why enforce gender in code after parsing?**  
+LLMs are probabilistic. Even with the profile loaded, the intent parser might output "unspecified" for gender. So after parsing, the pipeline checks and overwrites it if the profile has a gender set. The LLM is the first line; the code check is the backup.
 
-**Why color family compatibility scoring instead of exact color matching?**  
-Navy and charcoal are compatible. Red and yellow-gold are not. A rigid string-match approach can't know this. Color family membership + a compatibility matrix gives much better outfit coherence.
+**Why color family scoring instead of string matching?**  
+Navy and charcoal go together. Red and yellow-gold do not. A string match cannot know this. The color family compatibility matrix captures these relationships so outfit color coherence is scored meaningfully.
 
 ---
 
-## Taste Profile
+## Taste profile
 
-Every user gets a `profiles/{user_id}.json` that persists across sessions:
+Each user gets a `profiles/{user_id}.json` that persists across sessions:
 
 ```json
 {
@@ -233,26 +240,26 @@ Every user gets a `profiles/{user_id}.json` that persists across sessions:
 }
 ```
 
-The profile influences: intent parsing (context), style planning (constraints), retrieval (gender filter), and assembler (color preferences). It gets smarter with every session.
+The profile feeds into intent parsing, style planning, retrieval, and outfit scoring. It gets more accurate with each session.
 
 ---
 
-## Running Tests
+## Running tests
 
 ```bash
-python tests/test_data.py           # Always works — no API calls
-python tests/test_local.py          # Schema + factory tests
-python tests/test_integration.py    # Full pipeline — needs credentials
+python tests/test_data.py           # no API calls needed
+python tests/test_local.py          # schema and factory tests
+python tests/test_integration.py    # full pipeline, needs credentials
 ```
 
 ---
 
-## Known Limitations
+## Known limitations
 
-- **Catalog is from Kaggle** — prices are simulated, product names can be weird, images cover ~41K of 44K items.
-- **No real e-commerce integration** — this is a research prototype, not a shopping app.
-- **LLM outputs are non-deterministic** — the same request may produce slightly different outfits on repeated runs. That's a feature, not a bug. Mostly.
-- **Cold start** — new profiles with no history get broadly appealing outfits. The more you use it, the better it gets.
+- **Prices are simulated.** The Kaggle catalog has no real prices, so they are generated from category-based ranges (e.g. shirts $25-$80, blazers $50-$200). Not real retail prices.
+- **No e-commerce integration.** This is a research prototype. You cannot actually buy anything.
+- **LLM outputs vary.** The same request can produce different outfits on repeated runs. Mostly fine, occasionally surprising.
+- **Cold start.** New profiles get broadly appealing suggestions. It improves as you use it.
 
 ---
 
