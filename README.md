@@ -4,8 +4,6 @@
 
 StyleMind is a personal AI stylist. You describe what you need ("smart casual dinner, Pittsburgh, October, around $150") and it figures out the outfit, finds real products from a 44K-item catalog, and writes you a little lookbook. It also remembers your taste across sessions, so it gets more useful the more you use it.
 
-**Course:** 11-766 Large Language Model Applications (CMU)  
-**Author:** Tanay Mittal (tanaymit@andrew.cmu.edu)
 
 ---
 
